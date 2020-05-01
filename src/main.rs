@@ -1,4 +1,4 @@
-use std::{thread, time, error::Error};
+use std::{thread, time, error::Error, fs, env};
 use hex::decode;
 use crossterm::{
     execute,
@@ -65,32 +65,20 @@ const font: &'static [u8; 80] = &[
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
-    let mut code = String::new();
     let mut rng = rand::thread_rng();
 
-    code.push_str("611E"); //set v1 to 30 . 512
-    code.push_str("620E"); //set v2 to 14 . 514
-    code.push_str("A21C"); // sprite is at 540  . 516
-    code.push_str("00E0"); //clear screen . 518
-    code.push_str("6301"); // setv3       . 520
-    code.push_str("6402"); //             . 522
-    code.push_str("5340"); // skip next if . 524
-    code.push_str("2214"); // jmp to sub  . 526
-    code.push_str("120C"); //  jmp to 512 . 528
-    code.push_str("0000"); //             . 530
-    code.push_str("7301"); //             . 532
-    code.push_str("D124"); // draw x = v1, y = v2, 4 bytes  . 534
-    code.push_str("00EE"); // return from sub  . 536
-    code.push_str("0000"); //             . 538
-    code.push_str("183C"); //             . 540
-    code.push_str("7EFF"); //             . 542
-    code.push_str("0000"); //             . 544
-
     stdout().execute(terminal::Clear(terminal::ClearType::All))?;
-
+    if let Some(path) = env::args().nth(1) {
+        if let Ok(contents) = &fs::read(path) {
+            load_program_bytes(&mut state.memory[512..], contents);
+        } else {
+            panic!("couldnt read file");
+        }
+    } else {
+        panic!("provide program to load as first arg");
+    }
 
     load_program_bytes(&mut state.memory, font);
-    load_program(&mut state.memory, &code);
     loop {
         let start_time = time::Instant::now();
         let op = get_op_at(&state.memory, state.current_op_index);
@@ -275,7 +263,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.registers[15] = (old_address_register > state.address_register) as u8;
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
             // set address_register to font address for digit in reg x
-            state.address_register = (op2 * 5) as u16;
+            state.address_register = (state.registers[op2 as usize] * 5) as u16;
+            println!("new adrress register {}, val there {}, op2 {}, op {}", state.address_register, state.memory[state.address_register as usize], op2, op);
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
             let reg = state.registers[op2 as usize];
@@ -301,7 +290,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         } 
         render_pixels(&state.pixels)?;
 
-        println!("Current: {}, next: {}", state.current_op_index, next_op_index);
         state.current_op_index = next_op_index;
         let time_taken = start_time.elapsed().as_millis();
         if time_taken < 16 {
@@ -389,8 +377,7 @@ fn load_program(memory: &mut [u8; 4096], program: &str) {
     }
 }
 
-fn load_program_bytes(memory: &mut [u8; 4096], program: &[u8]) {
+fn load_program_bytes(memory: &mut [u8], program: &[u8]) {
     let sliced: &mut [u8] = &mut memory[0..program.len()];
-
     sliced.copy_from_slice(program);
 }

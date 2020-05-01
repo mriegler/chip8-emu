@@ -1,0 +1,8 @@
+# program
+    LOAD r1,$2
+    LDSPR r1
+    LOAD r2,$5
+    LOAD r3,$5
+    DRAW r2,r3,$5  draw number 2 at 5,5
+    
+end JUMP end   
