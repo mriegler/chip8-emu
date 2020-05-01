@@ -15,7 +15,7 @@ struct State {
     registers: [u8; 16],
     address_register: u16,
     counter: u16,
-    stack: Vec<u8>,
+    stack: Vec<u16>,
     current_op_index: u16,
     delay_timer: u8,
     sound_timer: u8,
@@ -48,15 +48,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     code.push_str("620E"); //set v2 to 14 . 514
     code.push_str("A21C"); // sprite is at 540  . 516
     code.push_str("00E0"); //clear screen . 518
-    code.push_str("0000"); //             . 520
-    code.push_str("D124"); // draw x = v1, y = v2, 4 bytes  . 522
+    code.push_str("2216"); // jmp to sub  . 520
+    code.push_str("0000"); //             . 522
     code.push_str("0000"); //             . 524
     code.push_str("0000"); //             . 526
     code.push_str("120C"); //  jmp to 512 . 528
     code.push_str("0000"); //             . 530
     code.push_str("0000"); //             . 532
-    code.push_str("0000"); //             . 534
-    code.push_str("0000"); //             . 536
+    code.push_str("D124"); // draw x = v1, y = v2, 4 bytes  . 534
+    code.push_str("00EE"); // return from sub  . 536
     code.push_str("0000"); //             . 538
     code.push_str("183C"); //             . 540
     code.push_str("7EFF"); //             . 542
@@ -76,6 +76,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         
         if op1 == 1 {
             //jump
+            next_op_index = op & 4095;
+        } else if op == 14 * 16 + 14 {
+            //return from subroutine
+            let ret = 
+                state.stack.pop().expect("tried returning from sub with an empty stack");
+            next_op_index = ret;
+        } else if op1 == 2 {
+            // execute subroutine
+            state.stack.push(next_op_index);
             next_op_index = op & 4095;
         } else if op == 14 * 16 {
             //clear screen
