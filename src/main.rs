@@ -67,7 +67,7 @@ fn main() {
 
     load_program(&mut state.memory, &code);
     loop {
-        let op = getOpAt(&state.memory, state.current_op_index);
+        let op = get_op_at(&state.memory, state.current_op_index);
         let mut next_op_index = state.current_op_index + 2;
         let op1 = (op >> 12) as u8;
         let op2 = (op >> 8 & 15) as u8;
@@ -104,16 +104,16 @@ fn main() {
                 let source = &state.memory[source_start + i];
                 println!("cur src {:?}", source);
                 for j in 0..8 {
-                    let sourceBit = source >> (7 - j) & 0b1;
-                    let sourceBool = sourceBit > 0;
-                    let targetPixel = &mut state.pixels[x + j][y + i];
+                    let source_bit = source >> (7 - j) & 0b1;
+                    let source_bool = source_bit > 0;
+                    let target_pixel = &mut state.pixels[x + j][y + i];
 
-                    let newPixel = sourceBool ^ *targetPixel;
-                    if newPixel != *targetPixel {
+                    let new_pixel = source_bool ^ *target_pixel;
+                    if new_pixel != *target_pixel {
                         collided = true;
                     }
-                    println!("targetPixel {},sourceBool: {},j {},newPixel {}", targetPixel, sourceBool, j, newPixel);
-                    *targetPixel = newPixel;
+                    println!("targetPixel {},sourceBool: {},j {},newPixel {}", target_pixel, source_bool, j, new_pixel);
+                    *target_pixel = new_pixel;
                 }
             }
         }
@@ -138,7 +138,7 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) {
     let _ = stdout.flush();
 }
 
-fn getOpAt(memory: &[u8; 4096], index: u16) -> u16 {
+fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
     let index = index as usize;
     if index > 4094 {
         panic!("getting op outside of memory");
