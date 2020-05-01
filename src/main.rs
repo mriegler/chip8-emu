@@ -48,10 +48,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     code.push_str("620E"); //set v2 to 14 . 514
     code.push_str("A21C"); // sprite is at 540  . 516
     code.push_str("00E0"); //clear screen . 518
-    code.push_str("2216"); // jmp to sub  . 520
-    code.push_str("0000"); //             . 522
-    code.push_str("0000"); //             . 524
-    code.push_str("0000"); //             . 526
+    code.push_str("6301"); // setv3       . 520
+    code.push_str("6402"); //             . 522
+    code.push_str("5340"); // skip next if . 524
+    code.push_str("2216"); // jmp to sub  . 526
     code.push_str("120C"); //  jmp to 512 . 528
     code.push_str("0000"); //             . 530
     code.push_str("0000"); //             . 532
@@ -86,6 +86,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             // execute subroutine
             state.stack.push(next_op_index);
             next_op_index = op & 4095;
+        } else if op1 == 3 {
+            //if reg x == NN skip next op
+            if state.registers[op2 as usize] == op as u8 {
+                next_op_index += 2;
+            }
+        } else if op1 == 4 {
+            // if reg x != NN skip next op
+            if state.registers[op2 as usize] != op as u8 {
+                next_op_index += 2;
+            }
+        } else if op1 == 5 {
+            // if reg x == reg y skip next op
+            if state.registers[op2 as usize] == state.registers[op3 as usize] {
+                next_op_index += 2;
+            }
         } else if op == 14 * 16 {
             //clear screen
             for i in 0..state.pixels.len() {
@@ -106,12 +121,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let source_start = state.address_register as usize;
             let height = op4 as usize;
 
-            println!("x: {}\ny: {}\nsource_start: {}\nheight: {}", x, y, source_start, height);
-            
             let mut collided = false;
             for i in 0..height {
                 let source = &state.memory[source_start + i];
-                println!("cur src {:?}", source);
                 for j in 0..8 {
                     let source_bit = source >> (7 - j) & 0b1;
                     let source_bool = source_bit > 0;
@@ -121,7 +133,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if new_pixel != *target_pixel {
                         collided = true;
                     }
-                    println!("targetPixel {},sourceBool: {},j {},newPixel {}", target_pixel, source_bool, j, new_pixel);
                     *target_pixel = new_pixel;
                 }
             }
@@ -131,8 +142,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         render_pixels(&state.pixels)?;
 
+        println!("Current: {}, next: {}", state.current_op_index, next_op_index);
         state.current_op_index = next_op_index;
-        thread::sleep(time::Duration::from_millis(20));
+        thread::sleep(time::Duration::from_millis(10));
     }
 }
 
@@ -146,6 +158,7 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
         }
         stdout.queue(cursor::MoveToNextLine(1))?;
     }
+    stdout.queue(cursor::MoveToNextLine(1))?;
     stdout.flush()?;
     return Ok(());
 }
