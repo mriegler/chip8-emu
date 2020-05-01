@@ -51,10 +51,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     code.push_str("6301"); // setv3       . 520
     code.push_str("6402"); //             . 522
     code.push_str("5340"); // skip next if . 524
-    code.push_str("2216"); // jmp to sub  . 526
+    code.push_str("2214"); // jmp to sub  . 526
     code.push_str("120C"); //  jmp to 512 . 528
     code.push_str("0000"); //             . 530
-    code.push_str("0000"); //             . 532
+    code.push_str("7301"); //             . 532
     code.push_str("D124"); // draw x = v1, y = v2, 4 bytes  . 534
     code.push_str("00EE"); // return from sub  . 536
     code.push_str("0000"); //             . 538
@@ -114,6 +114,66 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 6 {
             // set register
             state.registers[(op2 as usize)] = op as u8;
+        } else if op1 == 7 {
+            // add to reg x NN
+            let reg = &mut state.registers[op2 as usize];
+            *reg = reg.wrapping_add(op as u8);
+        } else if op1 == 8 && op4 == 0 {
+            //assign reg x to reg y
+            state.registers[op2 as usize] = state.registers[op3 as usize];
+        } else if op1 == 8 && op4 == 1 {
+            //set reg x to reg x | reg y
+            let reg_y = state.registers[op3 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x |= reg_y;
+        } else if op1 == 8 && op4 == 2 {
+            //set reg x to reg x & reg y
+            let reg_y = state.registers[op3 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x &= reg_y;
+        } else if op1 == 8 && op4 == 3 {
+            //set reg x to reg x ^ reg y
+            let reg_y = state.registers[op3 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x ^= reg_y;
+        }  else if op1 == 8 && op4 == 4 {
+            // set reg x to reg x + reg y
+            let reg_y = state.registers[op3 as usize];
+            let reg_x_old = state.registers[op2 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x = reg_x.wrapping_add(reg_y);
+            
+            // carry over?
+            state.registers[15] = (reg_x_old > *reg_x) as u8;
+        } else if op1 == 8 && op4 == 5 {
+            // set reg x to reg x - reg y
+            let reg_y = state.registers[op3 as usize];
+            let reg_x_old = state.registers[op2 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x = reg_x.wrapping_sub(reg_y);
+            
+            // borrow?
+            state.registers[15] = (reg_x_old >= *reg_x) as u8;
+        } else if op1 == 8 && op4 == 6 {
+            // shift reg x right
+            let reg_x = &mut state.registers[op2 as usize];
+            let dropped_bit = *reg_x & 1;
+            *reg_x = *reg_x >> 1;
+            state.registers[15] = dropped_bit;
+        } else if op1 == 8 && op4 == 7 {
+            //set reg x to reg y - reg x
+            let reg_y = state.registers[op3 as usize];
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x = reg_y - *reg_x;
+
+            // borrow?
+            state.registers[15] = (reg_y >= *reg_x) as u8;
+        }  else if op1 == 8 && op4 == 14 {
+            // shift reg x left
+            let reg_x = &mut state.registers[op2 as usize];
+            let dropped_bit = *reg_x & 128;
+            *reg_x = *reg_x << 1;
+            state.registers[15] = dropped_bit;
         } else if op1 == 13 {
             // render sprite
             let x = state.registers[op2 as usize] as usize;
