@@ -5,6 +5,7 @@ use crossterm::{
     cursor,
     queue,
     terminal,
+    style::Styler
 };
 use crossterm::event::{
     Event,
@@ -320,8 +321,11 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     stdout.queue(cursor::MoveTo(0,0))?;
     for y in 0..32 {
         for x in 0..64 {
-            let pixel = if pixels[x][y] { "X" } else { "-" };
-            stdout.write(format!("{}", pixel).as_bytes())?;
+            if pixels[x][y] { 
+                print!("{}", "█"); 
+            } else { 
+                print!("{}", "█".hidden()); 
+            };
         }
         stdout.queue(cursor::MoveToNextLine(1))?;
     }
