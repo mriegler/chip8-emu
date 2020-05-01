@@ -1,4 +1,4 @@
-use std::{thread, time};
+use std::{thread, time, error::Error};
 use hex::decode;
 use crossterm::{
     execute,
@@ -40,7 +40,7 @@ impl Default for State {
     }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
     let mut code = String::new();
 
@@ -62,7 +62,7 @@ fn main() {
     code.push_str("7EFF"); //             . 542
     code.push_str("0000"); //             . 544
 
-    let _ = stdout().execute(terminal::Clear(terminal::ClearType::All));
+    stdout().execute(terminal::Clear(terminal::ClearType::All))?;
 
 
     load_program(&mut state.memory, &code);
@@ -116,26 +116,29 @@ fn main() {
                     *target_pixel = new_pixel;
                 }
             }
+
+            state.registers[15] = collided as u8;
         }
 
-        render_pixels(&state.pixels);
+        render_pixels(&state.pixels)?;
 
         state.current_op_index = next_op_index;
         thread::sleep(time::Duration::from_millis(20));
     }
 }
 
-fn render_pixels(pixels: &[[bool; 32]; 64]) {
+fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     let mut stdout = stdout();
-    let _ = stdout.queue(cursor::MoveTo(0,0));
+    stdout.queue(cursor::MoveTo(0,0))?;
     for y in 0..32 {
         for x in 0..64 {
             let pixel = if pixels[x][y] { "X" } else { "-" };
-            let _ = stdout.write(format!("{}", pixel).as_bytes());
+            stdout.write(format!("{}", pixel).as_bytes())?;
         }
-        let _ = stdout.queue(cursor::MoveToNextLine(1));
+        stdout.queue(cursor::MoveToNextLine(1))?;
     }
-    let _ = stdout.flush();
+    stdout.flush()?;
+    return Ok(());
 }
 
 fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
