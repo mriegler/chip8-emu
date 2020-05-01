@@ -1,7 +1,5 @@
 use std::{thread, time, error::Error, fs, env};
-use hex::decode;
 use crossterm::{
-    execute,
     ExecutableCommand,
     QueueableCommand,
     cursor,
@@ -10,13 +8,12 @@ use crossterm::{
 };
 use crossterm::event::{
     Event,
-    KeyEvent,
     KeyCode,
     poll,
     read
 };
 use std::io::{stdout, Write};
-use rand::{thread_rng, Rng};
+use rand::{Rng};
 
 struct State {
     memory: [u8; 4096],
@@ -44,7 +41,7 @@ impl Default for State {
     }
 }
 
-const font: &'static [u8; 80] = &[
+const FONT: &'static [u8; 80] = &[
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
   0x20, 0x60, 0x20, 0x20, 0x70, // 1
   0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -63,6 +60,25 @@ const font: &'static [u8; 80] = &[
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
 
+const KEY_MAP: &'static [KeyCode; 16] = &[
+    KeyCode::Char('0'),
+    KeyCode::Char('1'),
+    KeyCode::Char('2'),
+    KeyCode::Char('3'),
+    KeyCode::Char('4'),
+    KeyCode::Char('5'),
+    KeyCode::Char('6'),
+    KeyCode::Char('7'),
+    KeyCode::Char('8'),
+    KeyCode::Char('9'),
+    KeyCode::Char('/'),
+    KeyCode::Char('*'),
+    KeyCode::Char('-'),
+    KeyCode::Char('+'),
+    KeyCode::Enter,
+    KeyCode::Char('.')
+];
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
     let mut rng = rand::thread_rng();
@@ -78,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         panic!("provide program to load as first arg");
     }
 
-    load_program_bytes(&mut state.memory, font);
+    load_program_bytes(&mut state.memory, FONT);
     loop {
         let start_time = time::Instant::now();
         let op = get_op_at(&state.memory, state.current_op_index);
@@ -314,25 +330,6 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     return Ok(());
 }
 
-const KEY_MAP: &'static [KeyCode; 16] = &[
-    KeyCode::Char('0'),
-    KeyCode::Char('1'),
-    KeyCode::Char('2'),
-    KeyCode::Char('3'),
-    KeyCode::Char('4'),
-    KeyCode::Char('5'),
-    KeyCode::Char('6'),
-    KeyCode::Char('7'),
-    KeyCode::Char('8'),
-    KeyCode::Char('9'),
-    KeyCode::Char('/'),
-    KeyCode::Char('*'),
-    KeyCode::Char('-'),
-    KeyCode::Char('+'),
-    KeyCode::Enter,
-    KeyCode::Char('.')
-];
-
 fn is_key_pressed(key_code: u8) -> bool {
     // use numpad as hex keyboard
     if poll(time::Duration::from_millis(1)).unwrap() {
@@ -358,23 +355,6 @@ fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
     }
 
     return (memory[index] as u16) << 8 | memory[index + 1] as u16;
-}
-
-fn load_program(memory: &mut [u8; 4096], program: &str) {
-    let program = match decode(program) {
-        Ok(decoded) => decoded,
-        Err(error) => panic!("cant decode program {:?}", error)
-    };
-
-    let sliced: &mut [u8] = &mut memory[512..];
-
-    for (i, byte) in sliced.iter_mut().enumerate() {
-        if i < program.len() {
-            *byte = program[i];
-        } else {
-            break;
-        }
-    }
 }
 
 fn load_program_bytes(memory: &mut [u8], program: &[u8]) {
