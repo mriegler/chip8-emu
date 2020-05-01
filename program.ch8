@@ -3,6 +3,19 @@
     LDSPR r1
     LOAD r2,$5
     LOAD r3,$5
-    DRAW r2,r3,$5  draw number 2 at 5,5
-    
+    LOAD r4,$5
+    LOAD r5,$0
+    LOAD r6,$0
+btn   SKUP r4
+    JUMP clear
+    SKNE r5,$1
+    JUMP btn
+draw  DRAW r2,r3,$5  draw number 2 at 5,5
+    LOAD r5,$1
+
+    JUMP btn
+clear CLR
+    LOAD r5,$0
+    JUMP btn     
+
 end JUMP end   

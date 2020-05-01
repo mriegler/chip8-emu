@@ -1,4 +1,4 @@
-use std::{thread, time, error::Error, fs, env};
+use std::{thread, time, error::Error, fs, env, process};
 use crossterm::{
     ExecutableCommand,
     QueueableCommand,
@@ -85,6 +85,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut rng = rand::thread_rng();
 
     stdout().execute(terminal::Clear(terminal::ClearType::All))?;
+    terminal::enable_raw_mode()?;
     if let Some(path) = env::args().nth(1) {
         if let Ok(contents) = &fs::read(path) {
             load_program_bytes(&mut state.memory[512..], contents);
@@ -104,7 +105,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         let op2 = (op >> 8 & 15) as u8;
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
-
+        
+        // q for quit
+        if poll(time::Duration::from_nanos(0)).unwrap() {
+            match read().unwrap() {
+                Event::Key(key_event) if key_event.code == KeyCode::Char('q') => process::exit(0),
+                _ => ()
+            }
+        }
         
         if op1 == 1 {
             //jump
@@ -281,7 +289,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
             // set address_register to font address for digit in reg x
             state.address_register = (state.registers[op2 as usize] * 5) as u16;
-            println!("new adrress register {}, val there {}, op2 {}, op {}", state.address_register, state.memory[state.address_register as usize], op2, op);
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
             let reg = state.registers[op2 as usize];
@@ -336,9 +343,13 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
 
 fn is_key_pressed(key_code: u8) -> bool {
     // use numpad as hex keyboard
+    println!("Checking for key {}", key_code);
     if poll(time::Duration::from_millis(1)).unwrap() {
         return match read().unwrap() {
-            Event::Key(key_event) => key_event.code == KEY_MAP[key_code as usize],
+            Event::Key(key_event) => {
+                println!("got key {:?}, looking for {}", key_event.code, key_code);
+                key_event.code == KEY_MAP[key_code as usize]
+            },
             _ => false
         }
     }
