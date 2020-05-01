@@ -22,13 +22,11 @@ struct State {
     memory: [u8; 4096],
     registers: [u8; 16],
     address_register: u16,
-    counter: u16,
     stack: Vec<u16>,
     current_op_index: u16,
     delay_timer: u8,
     sound_timer: u8,
-    pixels: [[bool; 32]; 64],
-    keys: u16
+    pixels: [[bool; 32]; 64]
 }
 
 impl Default for State {
@@ -37,16 +35,33 @@ impl Default for State {
             memory: [0u8; 4096],
             registers: [0u8; 16],
             address_register: 0,
-            counter: 0,
             stack: Vec::new(),
             current_op_index: 512,
             delay_timer: 0,
             sound_timer: 0,
-            pixels: [[false; 32]; 64],
-            keys: 0
+            pixels: [[false; 32]; 64]
         }
     }
 }
+
+const font: &'static [u8; 80] = &[
+  0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+  0x20, 0x60, 0x20, 0x20, 0x70, // 1
+  0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+  0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+  0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+  0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+  0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+  0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+  0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+  0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+  0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+  0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+  0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+  0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+  0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+  0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+];
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
@@ -74,14 +89,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     stdout().execute(terminal::Clear(terminal::ClearType::All))?;
 
 
+    load_program_bytes(&mut state.memory, font);
     load_program(&mut state.memory, &code);
     loop {
+        let start_time = time::Instant::now();
         let op = get_op_at(&state.memory, state.current_op_index);
         let mut next_op_index = state.current_op_index + 2;
         let op1 = (op >> 12) as u8;
         let op2 = (op >> 8 & 15) as u8;
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
+
         
         if op1 == 1 {
             //jump
@@ -256,8 +274,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             // overflow?
             state.registers[15] = (old_address_register > state.address_register) as u8;
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
-            // set address_register to font address TODO
-
+            // set address_register to font address for digit in reg x
+            state.address_register = (op2 * 5) as u16;
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
             let reg = state.registers[op2 as usize];
@@ -285,7 +303,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Current: {}, next: {}", state.current_op_index, next_op_index);
         state.current_op_index = next_op_index;
-        thread::sleep(time::Duration::from_millis(10));
+        let time_taken = start_time.elapsed().as_millis();
+        if time_taken < 16 {
+            // 60hz tick attempt
+            thread::sleep(time::Duration::from_millis(16 - time_taken as u64));
+        }
     }
 }
 
@@ -367,3 +389,8 @@ fn load_program(memory: &mut [u8; 4096], program: &str) {
     }
 }
 
+fn load_program_bytes(memory: &mut [u8; 4096], program: &[u8]) {
+    let sliced: &mut [u8] = &mut memory[0..program.len()];
+
+    sliced.copy_from_slice(program);
+}
