@@ -6,9 +6,17 @@ use crossterm::{
     QueueableCommand,
     cursor,
     queue,
-    terminal
+    terminal,
+};
+use crossterm::event::{
+    Event,
+    KeyEvent,
+    KeyCode,
+    poll,
+    read
 };
 use std::io::{stdout, Write};
+use rand::{thread_rng, Rng};
 
 struct State {
     memory: [u8; 4096],
@@ -43,6 +51,7 @@ impl Default for State {
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
     let mut code = String::new();
+    let mut rng = rand::thread_rng();
 
     code.push_str("611E"); //set v1 to 30 . 512
     code.push_str("620E"); //set v2 to 14 . 514
@@ -174,6 +183,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             let dropped_bit = *reg_x & 128;
             *reg_x = *reg_x << 1;
             state.registers[15] = dropped_bit;
+        } else if op1 == 9 {
+            // skip next if reg x != reg y
+            if state.registers[op2 as usize] != state.registers[op3 as usize] {
+                next_op_index += 2;
+            }
+        } else if op1 == 11 {
+            // jump to NNN + reg 0
+            let reg_0 = state.registers[0];
+            next_op_index = reg_0 as u16 + (op & 4095);
+        } else if op1 == 12 {
+            // set reg x to NN & random()
+            let reg_x = &mut state.registers[op2 as usize];
+            *reg_x = (op & 255) as u8 & rng.gen_range(0, 256 as u16) as u8;
         } else if op1 == 13 {
             // render sprite
             let x = state.registers[op2 as usize] as usize;
@@ -198,8 +220,67 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             state.registers[15] = collided as u8;
-        }
+        } else if op1 == 14 && op4 == 14 {
+            // skip next if button in reg x is pressed
+            let reg = state.registers[op2 as usize];
+            if is_key_pressed(reg) {
+                next_op_index += 2;
+            }
+        } else if op1 == 14 && op4 == 1 {
+            // skip next if button in reg x is not pressed
+            let reg = state.registers[op2 as usize];
+            if !is_key_pressed(reg) {
+                next_op_index += 2;
+            }
+        } else if op1 == 15 && op4 == 7 {
+            // set reg x to delay timer
+            state.registers[op2 as usize] = state.delay_timer;
+        } else if op1 == 15 && op4 == 10 {
+            // wait for key
+            let key = wait_for_key();
+            state.registers[op2 as usize] = key;
+        } else if op1 == 15 && op3 == 1 && op4 == 5 {
+            // set delay timer to reg x
+            let reg = state.registers[op2 as usize];
+            state.delay_timer = reg;
+        } else if op1 == 15 && op3 == 1 && op4 == 8 {
+            // set sound timer to reg x
+            let reg = state.registers[op2 as usize];
+            state.sound_timer = reg;
+        } else if op1 == 15 && op3 == 1 && op4 == 14 {
+            // add reg x to address register
+            let reg = state.registers[op2 as usize];
+            let old_address_register = state.address_register;
+            state.address_register = state.address_register.wrapping_add(reg as u16);
 
+            // overflow?
+            state.registers[15] = (old_address_register > state.address_register) as u8;
+        } else if op1 == 15 && op3 == 2 && op4 == 9 {
+            // set address_register to font address TODO
+
+        } else if op1 == 15 && op3 == 3 && op4 == 3 {
+            // store binary coded decimal of reg x at adress_register
+            let reg = state.registers[op2 as usize];
+            let hundreds = reg / 100;
+            let tens = (reg / 10) % 10;
+            let ones = reg % 10;
+
+            state.memory[state.address_register as usize] = hundreds;
+            state.memory[(state.address_register as usize) + 1] = tens;
+            state.memory[(state.address_register as usize) + 2] = ones;
+        } else if op1 == 15 && op3 == 5 && op4 == 5 {
+            // dump regsiters up to x inclusive to memory at address_register
+            for i in 0..op2 {
+                let reg = state.registers[i as usize];
+                state.memory[(state.address_register as usize) + 0] = reg;
+            }
+        } else if op1 == 15 && op3 == 6 && op4 == 5 {
+            // load registers up to x inclusive from mem at address_register
+            for i in 0..op2 {
+                let mem = state.memory[(state.address_register as usize) + 0];
+                state.registers[i as usize] = mem;
+            }
+        } 
         render_pixels(&state.pixels)?;
 
         println!("Current: {}, next: {}", state.current_op_index, next_op_index);
@@ -221,6 +302,43 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     stdout.queue(cursor::MoveToNextLine(1))?;
     stdout.flush()?;
     return Ok(());
+}
+
+const KEY_MAP: &'static [KeyCode; 16] = &[
+    KeyCode::Char('0'),
+    KeyCode::Char('1'),
+    KeyCode::Char('2'),
+    KeyCode::Char('3'),
+    KeyCode::Char('4'),
+    KeyCode::Char('5'),
+    KeyCode::Char('6'),
+    KeyCode::Char('7'),
+    KeyCode::Char('8'),
+    KeyCode::Char('9'),
+    KeyCode::Char('/'),
+    KeyCode::Char('*'),
+    KeyCode::Char('-'),
+    KeyCode::Char('+'),
+    KeyCode::Enter,
+    KeyCode::Char('.')
+];
+
+fn is_key_pressed(key_code: u8) -> bool {
+    // use numpad as hex keyboard
+    if poll(time::Duration::from_millis(1)).unwrap() {
+        return match read().unwrap() {
+            Event::Key(key_event) => key_event.code == KEY_MAP[key_code as usize],
+            _ => false
+        }
+    }
+    return false;
+}
+
+fn wait_for_key() -> u8 {
+    return match read().unwrap() {
+        Event::Key(key_event) => KEY_MAP.iter().position(|&r| r == key_event.code).unwrap() as u8,
+        _ => wait_for_key()
+    }
 }
 
 fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
