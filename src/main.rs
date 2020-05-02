@@ -83,6 +83,8 @@ const KEY_MAP: &'static [KeyCode; 16] = &[
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
     let mut rng = rand::thread_rng();
+    let mut log = fs::File::create("log.txt")?;
+    writeln!(log, "begin")?;
 
     stdout().execute(terminal::Clear(terminal::ClearType::All))?;
     terminal::enable_raw_mode()?;
@@ -109,13 +111,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         // q for quit
         if poll(time::Duration::from_nanos(0)).unwrap() {
             match read().unwrap() {
-                Event::Key(key_event) if key_event.code == KeyCode::Char('q') => process::exit(0),
+                Event::Key(key_event) if key_event.code == KeyCode::Char('q') => {
+                    terminal::disable_raw_mode()?;
+                    process::exit(0);
+                },
                 _ => ()
             }
         }
         
         if op1 == 1 {
             //jump
+            writeln!(log, "jumping to {}", op & 4095)?;
             next_op_index = op & 4095;
         } else if op == 14 * 16 + 14 {
             //return from subroutine
@@ -133,7 +139,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         } else if op1 == 4 {
             // if reg x != NN skip next op
+            writeln!(log, "checking if reg {} != {}", op2, op as u8)?;
             if state.registers[op2 as usize] != op as u8 {
+                writeln!(log, "skipping next")?;
                 next_op_index += 2;
             }
         } else if op1 == 5 {
@@ -143,6 +151,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         } else if op == 14 * 16 {
             //clear screen
+            writeln!(log, "clear screen")?;
             for i in 0..state.pixels.len() {
                 for j in 0..32 {
                     state.pixels[i][j] = false;
@@ -153,6 +162,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.address_register = op & 4095;
         } else if op1 == 6 {
             // set register
+            writeln!(log, "set register {} to {}", op2, op as u8)?;
             state.registers[(op2 as usize)] = op as u8;
         } else if op1 == 7 {
             // add to reg x NN
@@ -216,7 +226,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.registers[15] = dropped_bit;
         } else if op1 == 9 {
             // skip next if reg x != reg y
+            writeln!(log, "checking if reg {} != reg {}", op2, op3)?;
             if state.registers[op2 as usize] != state.registers[op3 as usize] {
+                writeln!(log, "skipping next")?;
                 next_op_index += 2;
             }
         } else if op1 == 11 {
@@ -229,6 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             *reg_x = (op & 255) as u8 & rng.gen_range(0, 256 as u16) as u8;
         } else if op1 == 13 {
             // render sprite
+            writeln!(log, "rendering sprite")?;
             let x = state.registers[op2 as usize] as usize;
             let y = state.registers[op3 as usize] as usize;
             let source_start = state.address_register as usize;
@@ -260,7 +273,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 14 && op4 == 1 {
             // skip next if button in reg x is not pressed
             let reg = state.registers[op2 as usize];
+            writeln!(log, "check if button {} is not pressed", reg)?;
             if !is_key_pressed(reg) {
+                writeln!(log, "skipping bc button {} not pressed", reg)?;
                 next_op_index += 2;
             }
         } else if op1 == 15 && op4 == 7 {
