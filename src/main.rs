@@ -24,7 +24,8 @@ struct State {
     current_op_index: u16,
     delay_timer: u8,
     sound_timer: u8,
-    pixels: [[bool; 32]; 64]
+    pixels: [[bool; 32]; 64],
+    key: u8
 }
 
 impl Default for State {
@@ -37,7 +38,8 @@ impl Default for State {
             current_op_index: 512,
             delay_timer: 0,
             sound_timer: 0,
-            pixels: [[false; 32]; 64]
+            pixels: [[false; 32]; 64],
+            key: 0
         }
     }
 }
@@ -108,17 +110,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
         
-        // q for quit
-        if poll(time::Duration::from_nanos(0)).unwrap() {
+        if poll(time::Duration::from_millis(2)).unwrap() {
             match read().unwrap() {
+                // q for quit
                 Event::Key(key_event) if key_event.code == KeyCode::Char('q') => {
                     terminal::disable_raw_mode()?;
                     process::exit(0);
                 },
-                _ => ()
-            }
+                Event::Key(key_event) => {
+                    // detection on term seems fucky, especially for multiple keys
+                    match KEY_MAP.iter().position(|&x| x == key_event.code) {
+                        Some(i) => state.key = i as u8,
+                        _ => ()
+                    }
+                },
+                _ => {
+                    state.key = 0;
+                }
+            };
+        } else {
+            state.key = 0;
         }
-        
         if op1 == 1 {
             //jump
             writeln!(log, "jumping to {}", op & 4095)?;
@@ -241,25 +253,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             *reg_x = (op & 255) as u8 & rng.gen_range(0, 256 as u16) as u8;
         } else if op1 == 13 {
             // render sprite
-            writeln!(log, "rendering sprite")?;
             let x = state.registers[op2 as usize] as usize;
             let y = state.registers[op3 as usize] as usize;
             let source_start = state.address_register as usize;
             let height = op4 as usize;
 
             let mut collided = false;
+            writeln!(log, "rendering sprite,x {} y {}, height {}", x, y, height)?;
             for i in 0..height {
                 let source = &state.memory[source_start + i];
                 for j in 0..8 {
-                    let source_bit = source >> (7 - j) & 0b1;
-                    let source_bool = source_bit > 0;
-                    let target_pixel = &mut state.pixels[x + j][y + i];
+                    if x + j < 63 && y + i < 31 {
+                        let source_bit = source >> (7 - j) & 0b1;
+                        let source_bool = source_bit > 0;
+                        let target_pixel = &mut state.pixels[x + j][y + i];
 
-                    let new_pixel = source_bool ^ *target_pixel;
-                    if new_pixel != *target_pixel {
-                        collided = true;
+                        let new_pixel = source_bool ^ *target_pixel;
+                        if new_pixel != *target_pixel {
+                            collided = true;
+                        }
+                        *target_pixel = new_pixel;
                     }
-                    *target_pixel = new_pixel;
                 }
             }
 
@@ -267,14 +281,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 14 && op4 == 14 {
             // skip next if button in reg x is pressed
             let reg = state.registers[op2 as usize];
-            if is_key_pressed(reg) {
+            if state.key == reg {
                 next_op_index += 2;
             }
         } else if op1 == 14 && op4 == 1 {
             // skip next if button in reg x is not pressed
             let reg = state.registers[op2 as usize];
-            writeln!(log, "check if button {} is not pressed", reg)?;
-            if !is_key_pressed(reg) {
+            writeln!(log, "check if button {} is not pressed, {}", reg, state.key)?;
+            if state.key != reg {
                 writeln!(log, "skipping bc button {} not pressed", reg)?;
                 next_op_index += 2;
             }
@@ -354,21 +368,6 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     stdout.queue(cursor::MoveToNextLine(1))?;
     stdout.flush()?;
     return Ok(());
-}
-
-fn is_key_pressed(key_code: u8) -> bool {
-    // use numpad as hex keyboard
-    println!("Checking for key {}", key_code);
-    if poll(time::Duration::from_millis(1)).unwrap() {
-        return match read().unwrap() {
-            Event::Key(key_event) => {
-                println!("got key {:?}, looking for {}", key_event.code, key_code);
-                key_event.code == KEY_MAP[key_code as usize]
-            },
-            _ => false
-        }
-    }
-    return false;
 }
 
 fn wait_for_key() -> u8 {
