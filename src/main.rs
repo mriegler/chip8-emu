@@ -5,7 +5,8 @@ use crossterm::{
     cursor,
     queue,
     terminal,
-    style::Styler
+    style::Styler,
+    style::Colorize
 };
 use crossterm::event::{
     Event,
@@ -37,7 +38,7 @@ impl Default for State {
             stack: Vec::new(),
             current_op_index: 512,
             delay_timer: 0,
-            sound_timer: 0,
+            sound_timer: 40,
             pixels: [[false; 32]; 64],
             key: 0
         }
@@ -109,6 +110,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         let op2 = (op >> 8 & 15) as u8;
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
+
+        if state.delay_timer > 0 {
+            state.delay_timer -= 1;
+        }
+        if state.sound_timer > 0 {
+            state.sound_timer -= 1;
+        }
         
         if poll(time::Duration::from_millis(2)).unwrap() {
             match read().unwrap() {
@@ -341,6 +349,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 state.registers[i as usize] = mem;
             }
         } 
+
+        handle_sound(&state.sound_timer)?;
         render_pixels(&state.pixels)?;
 
         state.current_op_index = next_op_index;
@@ -367,7 +377,19 @@ fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     }
     stdout.queue(cursor::MoveToNextLine(1))?;
     stdout.flush()?;
-    return Ok(());
+    Ok(())
+}
+
+fn handle_sound(timer: &u8) -> Result<(), Box<dyn Error>> {
+    // sound is too much work, so just visually display sound
+    let mut stdout = stdout();
+    stdout.queue(cursor::MoveTo(65, 0))?;
+    if *timer > 0 {
+        print!("{}", "█".magenta());
+    } else {
+        print!(" ");
+    }
+    Ok(())
 }
 
 fn wait_for_key() -> u8 {
