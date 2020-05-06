@@ -3,7 +3,6 @@ use crossterm::{
     ExecutableCommand,
     QueueableCommand,
     cursor,
-    queue,
     terminal,
     style::Styler,
     style::Colorize
@@ -89,9 +88,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut log = fs::File::create("log.txt")?;
     writeln!(log, "begin")?;
 
-    stdout().execute(terminal::Clear(terminal::ClearType::All))?;
-    terminal::enable_raw_mode()?;
     if let Some(path) = env::args().nth(1) {
+        writeln!(log, "path {}", path)?;
         if let Ok(contents) = &fs::read(path) {
             load_program_bytes(&mut state.memory[512..], contents);
         } else {
@@ -102,6 +100,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     load_program_bytes(&mut state.memory, FONT);
+
+    stdout().execute(terminal::Clear(terminal::ClearType::All))?;
+    terminal::enable_raw_mode()?;
     loop {
         let start_time = time::Instant::now();
         let op = get_op_at(&state.memory, state.current_op_index);
@@ -305,6 +306,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.registers[op2 as usize] = state.delay_timer;
         } else if op1 == 15 && op4 == 10 {
             // wait for key
+            writeln!(log, "waiting for keypress")?;
             let key = wait_for_key();
             state.registers[op2 as usize] = key;
         } else if op1 == 15 && op3 == 1 && op4 == 5 {
@@ -394,7 +396,13 @@ fn handle_sound(timer: &u8) -> Result<(), Box<dyn Error>> {
 
 fn wait_for_key() -> u8 {
     return match read().unwrap() {
-        Event::Key(key_event) => KEY_MAP.iter().position(|&r| r == key_event.code).unwrap() as u8,
+        Event::Key(key_event) =>{
+            let key_position = KEY_MAP.iter().position(|&r| r == key_event.code);
+            match key_position {
+                Some(key) => key as u8,
+                None => wait_for_key()
+            }
+        } 
         _ => wait_for_key()
     }
 }
