@@ -37,7 +37,7 @@ impl Default for State {
             stack: Vec::new(),
             current_op_index: 512,
             delay_timer: 0,
-            sound_timer: 40,
+            sound_timer: 0,
             pixels: [[false; 32]; 64],
             key: 0
         }
@@ -370,6 +370,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         state.current_op_index = next_op_index;
         let time_taken = start_time.elapsed().as_millis();
+        writeln!(log, "time taken: {}", time_taken)?;
         if time_taken < 16 {
             // 60hz tick attempt
             thread::sleep(time::Duration::from_millis(16 - time_taken as u64));
