@@ -112,6 +112,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
 
+        writeln!(log, "op {:#x}", op)?;
+
         if state.delay_timer > 0 {
             state.delay_timer -= 1;
         }
@@ -149,12 +151,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             let ret = 
                 state.stack.pop().expect("tried returning from sub with an empty stack");
             next_op_index = ret;
+            writeln!(log, "returning from sub to {}", next_op_index)?;
         } else if op1 == 2 {
             // execute subroutine
             state.stack.push(next_op_index);
             next_op_index = op & 4095;
+            writeln!(log, "run subroutine at {}", next_op_index)?;
         } else if op1 == 3 {
             //if reg x == NN skip next op
+            writeln!(log, "check if reg {} == {}", op2 as usize, op as u8)?;
             if state.registers[op2 as usize] == op as u8 {
                 next_op_index += 2;
             }
@@ -181,6 +186,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 10 {
             // set address register to the rest
             state.address_register = op & 4095;
+            writeln!(log, "set addr reg to {}", state.address_register)?;
         } else if op1 == 6 {
             // set register
             writeln!(log, "set register {} to {}", op2, op as u8)?;
@@ -304,6 +310,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 15 && op4 == 7 {
             // set reg x to delay timer
             state.registers[op2 as usize] = state.delay_timer;
+            writeln!(log, "set reg {} to delay, val {}", op2, state.delay_timer)?;
         } else if op1 == 15 && op4 == 10 {
             // wait for key
             writeln!(log, "waiting for keypress")?;
@@ -313,6 +320,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             // set delay timer to reg x
             let reg = state.registers[op2 as usize];
             state.delay_timer = reg;
+            writeln!(log, "set delay timer to reg {}, val {}", op2, reg)?;
         } else if op1 == 15 && op3 == 1 && op4 == 8 {
             // set sound timer to reg x
             let reg = state.registers[op2 as usize];
@@ -322,11 +330,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let reg = state.registers[op2 as usize];
             let old_address_register = state.address_register;
             state.address_register = state.address_register.wrapping_add(reg as u16);
+            writeln!(log, "add {} to addr reg (old {}, new {})", reg, old_address_register, state.address_register)?;
 
             // overflow?
             state.registers[15] = (old_address_register > state.address_register) as u8;
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
             // set address_register to font address for digit in reg x
+            writeln!(log, "setting address register to font {}", state.registers[op2 as usize])?;
             state.address_register = (state.registers[op2 as usize] * 5) as u16;
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
@@ -335,6 +345,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let tens = (reg / 10) % 10;
             let ones = reg % 10;
 
+            writeln!(log, "storing bcd of {}: {} {} {}", reg, hundreds, tens, ones)?;
             state.memory[state.address_register as usize] = hundreds;
             state.memory[(state.address_register as usize) + 1] = tens;
             state.memory[(state.address_register as usize) + 2] = ones;
@@ -346,9 +357,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         } else if op1 == 15 && op3 == 6 && op4 == 5 {
             // load registers up to x inclusive from mem at address_register
-            for i in 0..op2 {
-                let mem = state.memory[(state.address_register as usize) + 0];
+            for i in 0..op2 + 1 {
+                let mem_address = (state.address_register as usize) + i as usize;
+                let mem = state.memory[mem_address];
                 state.registers[i as usize] = mem;
+                writeln!(log, "load reg {} from mem at {}, val {}", i, mem_address, mem)?;
             }
         } 
 
