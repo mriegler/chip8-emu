@@ -1,20 +1,10 @@
-use std::{thread, time, error::Error, fs, env, process};
+use crossterm::event::{poll, read, Event, KeyCode};
 use crossterm::{
-    ExecutableCommand,
-    QueueableCommand,
-    cursor,
-    terminal,
-    style::Styler,
-    style::Colorize
+    cursor, style::Colorize, style::Styler, terminal, ExecutableCommand, QueueableCommand,
 };
-use crossterm::event::{
-    Event,
-    KeyCode,
-    poll,
-    read
-};
+use rand::Rng;
 use std::io::{stdout, Write};
-use rand::{Rng};
+use std::{env, error::Error, fs, process, thread, time};
 
 struct State {
     memory: [u8; 4096],
@@ -25,7 +15,7 @@ struct State {
     delay_timer: u8,
     sound_timer: u8,
     pixels: [[bool; 32]; 64],
-    key: u8
+    key: u8,
 }
 
 impl Default for State {
@@ -39,28 +29,28 @@ impl Default for State {
             delay_timer: 0,
             sound_timer: 0,
             pixels: [[false; 32]; 64],
-            key: 0
+            key: 0,
         }
     }
 }
 
 const FONT: &'static [u8; 80] = &[
-  0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-  0x20, 0x60, 0x20, 0x20, 0x70, // 1
-  0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-  0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-  0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-  0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-  0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-  0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-  0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-  0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-  0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-  0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-  0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-  0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-  0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-  0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
 const KEY_MAP: &'static [KeyCode; 16] = &[
@@ -79,7 +69,7 @@ const KEY_MAP: &'static [KeyCode; 16] = &[
     KeyCode::Char('-'),
     KeyCode::Char('+'),
     KeyCode::Enter,
-    KeyCode::Char('.')
+    KeyCode::Char('.'),
 ];
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -120,21 +110,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         if state.sound_timer > 0 {
             state.sound_timer -= 1;
         }
-        
+
         if poll(time::Duration::from_millis(2)).unwrap() {
             match read().unwrap() {
                 // q for quit
                 Event::Key(key_event) if key_event.code == KeyCode::Char('q') => {
                     terminal::disable_raw_mode()?;
                     process::exit(0);
-                },
+                }
                 Event::Key(key_event) => {
                     // detection on term seems fucky, especially for multiple keys
                     match KEY_MAP.iter().position(|&x| x == key_event.code) {
                         Some(i) => state.key = i as u8,
-                        _ => ()
+                        _ => (),
                     }
-                },
+                }
                 _ => {
                     state.key = 0;
                 }
@@ -148,8 +138,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             next_op_index = op & 4095;
         } else if op == 14 * 16 + 14 {
             //return from subroutine
-            let ret = 
-                state.stack.pop().expect("tried returning from sub with an empty stack");
+            let ret = state
+                .stack
+                .pop()
+                .expect("tried returning from sub with an empty stack");
             next_op_index = ret;
             writeln!(log, "returning from sub to {}", next_op_index)?;
         } else if op1 == 2 {
@@ -213,13 +205,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let reg_y = state.registers[op3 as usize];
             let reg_x = &mut state.registers[op2 as usize];
             *reg_x ^= reg_y;
-        }  else if op1 == 8 && op4 == 4 {
+        } else if op1 == 8 && op4 == 4 {
             // set reg x to reg x + reg y
             let reg_y = state.registers[op3 as usize];
             let reg_x_old = state.registers[op2 as usize];
             let reg_x = &mut state.registers[op2 as usize];
             *reg_x = reg_x.wrapping_add(reg_y);
-            
+
             // carry over?
             state.registers[15] = (reg_x_old > *reg_x) as u8;
         } else if op1 == 8 && op4 == 5 {
@@ -228,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let reg_x_old = state.registers[op2 as usize];
             let reg_x = &mut state.registers[op2 as usize];
             *reg_x = reg_x.wrapping_sub(reg_y);
-            
+
             // borrow?
             state.registers[15] = (reg_x_old >= *reg_x) as u8;
         } else if op1 == 8 && op4 == 6 {
@@ -245,7 +237,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // borrow?
             state.registers[15] = (reg_y >= *reg_x) as u8;
-        }  else if op1 == 8 && op4 == 14 {
+        } else if op1 == 8 && op4 == 14 {
             // shift reg x left
             let reg_x = &mut state.registers[op2 as usize];
             let dropped_bit = *reg_x & 128;
@@ -330,13 +322,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             let reg = state.registers[op2 as usize];
             let old_address_register = state.address_register;
             state.address_register = state.address_register.wrapping_add(reg as u16);
-            writeln!(log, "add {} to addr reg (old {}, new {})", reg, old_address_register, state.address_register)?;
+            writeln!(
+                log,
+                "add {} to addr reg (old {}, new {})",
+                reg, old_address_register, state.address_register
+            )?;
 
             // overflow?
             state.registers[15] = (old_address_register > state.address_register) as u8;
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
             // set address_register to font address for digit in reg x
-            writeln!(log, "setting address register to font {}", state.registers[op2 as usize])?;
+            writeln!(
+                log,
+                "setting address register to font {}",
+                state.registers[op2 as usize]
+            )?;
             state.address_register = (state.registers[op2 as usize] * 5) as u16;
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
@@ -345,7 +345,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let tens = (reg / 10) % 10;
             let ones = reg % 10;
 
-            writeln!(log, "storing bcd of {}: {} {} {}", reg, hundreds, tens, ones)?;
+            writeln!(
+                log,
+                "storing bcd of {}: {} {} {}",
+                reg, hundreds, tens, ones
+            )?;
             state.memory[state.address_register as usize] = hundreds;
             state.memory[(state.address_register as usize) + 1] = tens;
             state.memory[(state.address_register as usize) + 2] = ones;
@@ -361,9 +365,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mem_address = (state.address_register as usize) + i as usize;
                 let mem = state.memory[mem_address];
                 state.registers[i as usize] = mem;
-                writeln!(log, "load reg {} from mem at {}, val {}", i, mem_address, mem)?;
+                writeln!(
+                    log,
+                    "load reg {} from mem at {}, val {}",
+                    i, mem_address, mem
+                )?;
             }
-        } 
+        }
 
         handle_sound(&state.sound_timer)?;
         render_pixels(&state.pixels)?;
@@ -380,13 +388,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
     let mut stdout = stdout();
-    stdout.queue(cursor::MoveTo(0,0))?;
+    stdout.queue(cursor::MoveTo(0, 0))?;
     for y in 0..32 {
         for x in 0..64 {
-            if pixels[x][y] { 
-                print!("{}", "█"); 
-            } else { 
-                print!("{}", "█".hidden()); 
+            if pixels[x][y] {
+                print!("{}", "█");
+            } else {
+                print!("{}", "█".hidden());
             };
         }
         stdout.queue(cursor::MoveToNextLine(1))?;
@@ -410,15 +418,15 @@ fn handle_sound(timer: &u8) -> Result<(), Box<dyn Error>> {
 
 fn wait_for_key() -> u8 {
     return match read().unwrap() {
-        Event::Key(key_event) =>{
+        Event::Key(key_event) => {
             let key_position = KEY_MAP.iter().position(|&r| r == key_event.code);
             match key_position {
                 Some(key) => key as u8,
-                None => wait_for_key()
+                None => wait_for_key(),
             }
-        } 
-        _ => wait_for_key()
-    }
+        }
+        _ => wait_for_key(),
+    };
 }
 
 fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
@@ -433,4 +441,4 @@ fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
 fn load_program_bytes(memory: &mut [u8], program: &[u8]) {
     let sliced: &mut [u8] = &mut memory[0..program.len()];
     sliced.copy_from_slice(program);
-}
+}}
