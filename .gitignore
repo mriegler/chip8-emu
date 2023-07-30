@@ -1,2 +1,7 @@
 /target
 /roms
+log.txt
+.vscode
+program.bin
+output.ch8
+.ws.ode-workspace
