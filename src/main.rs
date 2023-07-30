@@ -1,38 +1,14 @@
 use crossterm::event::{poll, read, Event, KeyCode};
-use crossterm::{
-    cursor, style::Colorize, style::Styler, terminal, ExecutableCommand, QueueableCommand,
-};
+use crossterm::{cursor, style::Colorize, terminal, ExecutableCommand, QueueableCommand};
+use log::log;
 use rand::Rng;
-use std::io::{stdout, Write};
+use state::State;
+use std::io::stdout;
 use std::{env, error::Error, fs, process, thread, time};
-
-struct State {
-    memory: [u8; 4096],
-    registers: [u8; 16],
-    address_register: u16,
-    stack: Vec<u16>,
-    current_op_index: u16,
-    delay_timer: u8,
-    sound_timer: u8,
-    pixels: [[bool; 32]; 64],
-    key: u8,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        State {
-            memory: [0u8; 4096],
-            registers: [0u8; 16],
-            address_register: 0,
-            stack: Vec::new(),
-            current_op_index: 512,
-            delay_timer: 0,
-            sound_timer: 0,
-            pixels: [[false; 32]; 64],
-            key: 0,
-        }
-    }
-}
+pub mod log;
+pub mod screen;
+pub mod state;
+pub mod util;
 
 const FONT: &'static [u8; 80] = &[
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -75,11 +51,11 @@ const KEY_MAP: &'static [KeyCode; 16] = &[
 fn main() -> Result<(), Box<dyn Error>> {
     let mut state: State = Default::default();
     let mut rng = rand::thread_rng();
-    let mut log = fs::File::create("log.txt")?;
-    writeln!(log, "begin")?;
+    log("asd");
+    log(format!("begin"));
 
     if let Some(path) = env::args().nth(1) {
-        writeln!(log, "path {}", path)?;
+        log(format!("path {}", path));
         if let Ok(contents) = &fs::read(path) {
             load_program_bytes(&mut state.memory[512..], contents);
         } else {
@@ -102,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let op3 = (op >> 4 & 15) as u8;
         let op4 = (op & 15) as u8;
 
-        writeln!(log, "op {:#x}", op)?;
+        log(format!("op {:#x}", op));
 
         if state.delay_timer > 0 {
             state.delay_timer -= 1;
@@ -134,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         if op1 == 1 {
             //jump
-            writeln!(log, "jumping to {}", op & 4095)?;
+            log(format!("jumping to {}", op & 4095));
             next_op_index = op & 4095;
         } else if op == 14 * 16 + 14 {
             //return from subroutine
@@ -143,23 +119,23 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .pop()
                 .expect("tried returning from sub with an empty stack");
             next_op_index = ret;
-            writeln!(log, "returning from sub to {}", next_op_index)?;
+            log(format!("returning from sub to {}", next_op_index));
         } else if op1 == 2 {
             // execute subroutine
             state.stack.push(next_op_index);
             next_op_index = op & 4095;
-            writeln!(log, "run subroutine at {}", next_op_index)?;
+            log(format!("run subroutine at {}", next_op_index));
         } else if op1 == 3 {
             //if reg x == NN skip next op
-            writeln!(log, "check if reg {} == {}", op2 as usize, op as u8)?;
+            log(format!("check if reg {} == {}", op2 as usize, op as u8));
             if state.registers[op2 as usize] == op as u8 {
                 next_op_index += 2;
             }
         } else if op1 == 4 {
             // if reg x != NN skip next op
-            writeln!(log, "checking if reg {} != {}", op2, op as u8)?;
+            log(format!("checking if reg {} != {}", op2, op as u8));
             if state.registers[op2 as usize] != op as u8 {
-                writeln!(log, "skipping next")?;
+                log(format!("skipping next"));
                 next_op_index += 2;
             }
         } else if op1 == 5 {
@@ -169,20 +145,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         } else if op == 14 * 16 {
             //clear screen
-            writeln!(log, "clear screen")?;
-            for i in 0..state.pixels.len() {
-                for j in 0..32 {
-                    state.pixels[i][j] = false;
-                }
-            }
+            log(format!("clear screen"));
+            state.screen.clear_screen();
         } else if op1 == 10 {
             // set address register to the rest
             state.address_register = op & 4095;
-            writeln!(log, "set addr reg to {}", state.address_register)?;
+            log(format!("set addr reg to {}", state.address_register));
         } else if op1 == 6 {
             // set register
-            writeln!(log, "set register {} to {}", op2, op as u8)?;
-            state.registers[(op2 as usize)] = op as u8;
+            log(format!("set register {} to {}", op2, op as u8));
+            state.registers[op2 as usize] = op as u8;
         } else if op1 == 7 {
             // add to reg x NN
             let reg = &mut state.registers[op2 as usize];
@@ -245,9 +217,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             state.registers[15] = dropped_bit;
         } else if op1 == 9 {
             // skip next if reg x != reg y
-            writeln!(log, "checking if reg {} != reg {}", op2, op3)?;
+            log(format!("checking if reg {} != reg {}", op2, op3));
             if state.registers[op2 as usize] != state.registers[op3 as usize] {
-                writeln!(log, "skipping next")?;
+                log(format!("skipping next"));
                 next_op_index += 2;
             }
         } else if op1 == 11 {
@@ -264,26 +236,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             let y = state.registers[op3 as usize] as usize;
             let source_start = state.address_register as usize;
             let height = op4 as usize;
+            let collided = state.screen.render_sprite(
+                x,
+                y,
+                &state.memory[source_start..(source_start + height)],
+            );
 
-            let mut collided = false;
-            writeln!(log, "rendering sprite,x {} y {}, height {}", x, y, height)?;
-            for i in 0..height {
-                let source = &state.memory[source_start + i];
-                for j in 0..8 {
-                    if x + j < 63 && y + i < 31 {
-                        let source_bit = source >> (7 - j) & 0b1;
-                        let source_bool = source_bit > 0;
-                        let target_pixel = &mut state.pixels[x + j][y + i];
-
-                        let new_pixel = source_bool ^ *target_pixel;
-                        if new_pixel != *target_pixel {
-                            collided = true;
-                        }
-                        *target_pixel = new_pixel;
-                    }
-                }
-            }
-
+            log(format!(
+                "rendering sprite,x {} y {}, height {}",
+                x, y, height
+            ));
             state.registers[15] = collided as u8;
         } else if op1 == 14 && op4 == 14 {
             // skip next if button in reg x is pressed
@@ -294,25 +256,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else if op1 == 14 && op4 == 1 {
             // skip next if button in reg x is not pressed
             let reg = state.registers[op2 as usize];
-            writeln!(log, "check if button {} is not pressed, {}", reg, state.key)?;
+            log(format!(
+                "check if button {} is not pressed, {}",
+                reg, state.key
+            ));
             if state.key != reg {
-                writeln!(log, "skipping bc button {} not pressed", reg)?;
+                log(format!("skipping bc button {} not pressed", reg));
                 next_op_index += 2;
             }
         } else if op1 == 15 && op4 == 7 {
             // set reg x to delay timer
             state.registers[op2 as usize] = state.delay_timer;
-            writeln!(log, "set reg {} to delay, val {}", op2, state.delay_timer)?;
+            log(format!(
+                "set reg {} to delay, val {}",
+                op2, state.delay_timer
+            ));
         } else if op1 == 15 && op4 == 10 {
             // wait for key
-            writeln!(log, "waiting for keypress")?;
+            log(format!("waiting for keypress"));
             let key = wait_for_key();
             state.registers[op2 as usize] = key;
         } else if op1 == 15 && op3 == 1 && op4 == 5 {
             // set delay timer to reg x
             let reg = state.registers[op2 as usize];
             state.delay_timer = reg;
-            writeln!(log, "set delay timer to reg {}, val {}", op2, reg)?;
+            log(format!("set delay timer to reg {}, val {}", op2, reg));
         } else if op1 == 15 && op3 == 1 && op4 == 8 {
             // set sound timer to reg x
             let reg = state.registers[op2 as usize];
@@ -322,21 +290,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             let reg = state.registers[op2 as usize];
             let old_address_register = state.address_register;
             state.address_register = state.address_register.wrapping_add(reg as u16);
-            writeln!(
-                log,
+            log(format!(
                 "add {} to addr reg (old {}, new {})",
                 reg, old_address_register, state.address_register
-            )?;
-
+            ));
             // overflow?
             state.registers[15] = (old_address_register > state.address_register) as u8;
         } else if op1 == 15 && op3 == 2 && op4 == 9 {
             // set address_register to font address for digit in reg x
-            writeln!(
-                log,
+            log(format!(
                 "setting address register to font {}",
                 state.registers[op2 as usize]
-            )?;
+            ));
             state.address_register = (state.registers[op2 as usize] * 5) as u16;
         } else if op1 == 15 && op3 == 3 && op4 == 3 {
             // store binary coded decimal of reg x at adress_register
@@ -345,11 +310,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let tens = (reg / 10) % 10;
             let ones = reg % 10;
 
-            writeln!(
-                log,
+            log(format!(
                 "storing bcd of {}: {} {} {}",
                 reg, hundreds, tens, ones
-            )?;
+            ));
             state.memory[state.address_register as usize] = hundreds;
             state.memory[(state.address_register as usize) + 1] = tens;
             state.memory[(state.address_register as usize) + 2] = ones;
@@ -365,43 +329,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mem_address = (state.address_register as usize) + i as usize;
                 let mem = state.memory[mem_address];
                 state.registers[i as usize] = mem;
-                writeln!(
-                    log,
+                log(format!(
                     "load reg {} from mem at {}, val {}",
                     i, mem_address, mem
-                )?;
+                ));
             }
         }
 
         handle_sound(&state.sound_timer)?;
-        render_pixels(&state.pixels)?;
+        state.screen.render_pixels()?;
 
         state.current_op_index = next_op_index;
         let time_taken = start_time.elapsed().as_millis();
-        writeln!(log, "time taken: {}", time_taken)?;
+        log(format!("time taken: {}", time_taken));
         if time_taken < 16 {
             // 60hz tick attempt
             thread::sleep(time::Duration::from_millis(16 - time_taken as u64));
         }
     }
-}
-
-fn render_pixels(pixels: &[[bool; 32]; 64]) -> Result<(), Box<dyn Error>> {
-    let mut stdout = stdout();
-    stdout.queue(cursor::MoveTo(0, 0))?;
-    for y in 0..32 {
-        for x in 0..64 {
-            if pixels[x][y] {
-                print!("{}", "█");
-            } else {
-                print!("{}", "█".hidden());
-            };
-        }
-        stdout.queue(cursor::MoveToNextLine(1))?;
-    }
-    stdout.queue(cursor::MoveToNextLine(1))?;
-    stdout.flush()?;
-    Ok(())
 }
 
 fn handle_sound(timer: &u8) -> Result<(), Box<dyn Error>> {
@@ -441,4 +386,4 @@ fn get_op_at(memory: &[u8; 4096], index: u16) -> u16 {
 fn load_program_bytes(memory: &mut [u8], program: &[u8]) {
     let sliced: &mut [u8] = &mut memory[0..program.len()];
     sliced.copy_from_slice(program);
-}}
+}
