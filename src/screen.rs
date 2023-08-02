@@ -31,17 +31,23 @@ impl Screen {
         for (i, el) in source.iter().enumerate() {
             log(format!("sprite line {}: {:08b}", i, el));
             for j in 0..8 {
-                let target_x = x + j;
-                let target_y = y + i;
-                if target_x < 63 && target_y < 31 {
-                    let source_pixel = get_bit(*el, 7 - j);
-                    log(format!(
-                        "val: {}, location x {} y {}",
-                        source_pixel, target_x, target_y
-                    ));
-                    let current_collided = self.xor_pixel(target_x, target_y, source_pixel);
-                    collided = collided || current_collided;
+                let mut target_x = x + j;
+                let mut target_y = y + i;
+
+                if target_x > 63 {
+                    target_x = target_x % 64;
                 }
+                if target_y > 32 {
+                    target_y = target_y % 32;
+                }
+
+                let source_pixel = get_bit(*el, 7 - j);
+                log(format!(
+                    "val: {}, location x {} y {}",
+                    source_pixel, target_x, target_y
+                ));
+                let current_collided = self.xor_pixel(target_x, target_y, source_pixel);
+                collided = collided || current_collided;
             }
         }
 

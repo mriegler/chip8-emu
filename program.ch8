@@ -1,7 +1,7 @@
 # program
     LOAD r1,$9
     LDSPR r1
-    LOAD r2,$10
-    LOAD r3,$10
+    LOAD r2,$41
+    LOAD r3,$21
 draw  DRAW r2,r3,$5  draw number 2 at 5,5
 end JUMP end   
